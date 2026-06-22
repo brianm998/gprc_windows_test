@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "GrpcWindowsSpike",
-    platforms: [.macOS(.v15)],   // ignored on Windows/Linux; grpc-swift 2 needs macOS 15 when on mac
+    platforms: [.macOS("15.0")],  // ignored on Windows/Linux; grpc-swift 2 needs macOS 15 when on mac
     dependencies: [
         .package(url: "https://github.com/grpc/grpc-swift.git",               from: "2.0.0"),
         .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "1.0.0"),
