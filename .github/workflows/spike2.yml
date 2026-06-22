@@ -1,0 +1,92 @@
+name: spike round 2 (patched grpc + stdio)
+
+on:
+  push: {}
+  workflow_dispatch: {}
+
+jobs:
+  # Q6: does the one-line ucrt patch make grpc-swift compile AND run on Windows?
+  grpc-patched:
+    name: "Q6 patched-grpc (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same runner/Swift constraints as round 1 (see spike.yml comments for rationale):
+      # macos-15 required for Dispatch Sendable; windows-2022 required for Clang 19 compat.
+      - uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.1.0"
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Resolve
+        run: swift package resolve
+
+      # Inject the missing `#elseif canImport(ucrt)` branch into the resolved checkout.
+      # On Linux/macOS this is a no-op patch (canImport(ucrt) is false there).
+      - name: Patch grpc-swift ucrt import
+        run: python scripts/patch_grpc_ucrt.py
+
+      - name: Build
+        run: swift build -v
+
+      - name: Test (in-process, informational)
+        run: swift test
+        continue-on-error: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Reuses the round-1 harness verbatim (Q2 unary + Q3 streaming + Q4 handshake).
+      - name: Run two-process spike
+        run: python scripts/run_spike.py
+
+  # Q7: does binary length-framed protobuf over stdio work on Windows?
+  # StdioEcho depends ONLY on SwiftProtobuf — never on GRPCCore/NIO.
+  # This job intentionally does NOT run patch_grpc_ucrt.py; if grpc-swift
+  # somehow still gets built (SwiftPM graph walk), that would be a packaging error.
+  stdio:
+    name: "Q7 protobuf-over-stdio (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.1.0"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+
+      - name: Install Python protobuf runtime
+        run: python -m pip install "protobuf>=5.27,<6"
+
+      # Generate the Python-side stub so run_stdio_spike.py can import spike_pb2.
+      # The Swift stubs (StdioMessages/spike.pb.swift) are pre-committed.
+      - name: Generate Python protobuf stub
+        run: protoc --proto_path=proto --python_out=scripts proto/spike.proto
+
+      # Build only StdioEcho — should NOT touch grpc-swift (StdioEcho→StdioMessages→SwiftProtobuf only).
+      - name: Build StdioEcho
+        run: swift build -v --product StdioEcho
+
+      # Q7a unary + Q7b streaming over binary stdio; asserts STDIO_UNARY_OK + STDIO_STREAM_OK.
+      - name: Run stdio spike
+        run: python scripts/run_stdio_spike.py

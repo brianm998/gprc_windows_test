@@ -10,3 +10,20 @@ service Echo {
 
 message EchoRequest  { string message = 1; int32 count = 2; }
 message EchoResponse { string message = 1; int32 index = 2; }
+
+// Q7: length-framed protobuf over stdio (NIO-free transport validation)
+message Envelope {
+  uint64 id = 1;
+  enum Kind {
+    REQUEST      = 0;
+    RESPONSE     = 1;
+    ERROR        = 2;
+    STREAM_ITEM  = 3;
+    STREAM_END   = 4;
+    NOTIFICATION = 5;
+  }
+  Kind   kind    = 2;
+  string method  = 3;   // "echo" | "stream" | "shutdown"
+  bytes  payload = 4;   // serialized EchoRequest / EchoResponse
+  string error   = 5;
+}

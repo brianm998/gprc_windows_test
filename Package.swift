@@ -11,11 +11,20 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-protobuf.git",          from: "1.28.0"),
     ],
     targets: [
+        // Q6: gRPC stubs — depends on GRPCCore + SwiftProtobuf
         .target(
             name: "SpikeProto",
             dependencies: [
                 .product(name: "GRPCCore",      package: "grpc-swift"),
                 .product(name: "GRPCProtobuf",  package: "grpc-swift-protobuf"),
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+            ]
+        ),
+        // Q7: message-only stubs — depends ONLY on SwiftProtobuf, never on GRPCCore.
+        // StdioEcho links against this so `swift build --product StdioEcho` never touches grpc-swift.
+        .target(
+            name: "StdioMessages",
+            dependencies: [
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ]
         ),
@@ -33,6 +42,14 @@ let package = Package(
                 "SpikeProto",
                 .product(name: "GRPCCore",               package: "grpc-swift"),
                 .product(name: "GRPCNIOTransportHTTP2",  package: "grpc-swift-nio-transport"),
+            ]
+        ),
+        // Q7: stdio echo daemon — only SwiftProtobuf, no NIO networking
+        .executableTarget(
+            name: "StdioEcho",
+            dependencies: [
+                "StdioMessages",
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ]
         ),
         .testTarget(
