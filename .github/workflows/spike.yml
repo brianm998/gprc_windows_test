@@ -46,6 +46,9 @@ jobs:
           path: Package.resolved
 
       # Q1: does it compile on this OS?
+      # NOTE: Windows currently fails here — grpc-swift 2.2.3 is missing a
+      # `#elseif canImport(ucrt)` branch in RetryDelaySequence.swift, causing
+      # `#error("Unsupported OS")`. One-line fix needed upstream in grpc-swift.
       - name: Build
         run: swift build -v
 

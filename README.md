@@ -22,15 +22,49 @@ See `GRPC_WINDOWS_SPIKE_PLAN.md` for full background, methodology, and decision 
 
 ## Results matrix
 
-*(Fill in after CI runs — paste links to the relevant workflow runs)*
-
-| Question | ubuntu | macos | windows | Notes / log link |
+| Question | ubuntu | macos | windows | Notes |
 |---|---|---|---|---|
-| Q1 build (`swift build`) | ☐ | ☐ | ☐ | |
-| Q2 unary RPC | ☐ | ☐ | ☐ | |
-| Q3 server-streaming RPC | ☐ | ☐ | ☐ | |
-| Q4 stdout handshake + 2-process | ☐ | ☐ | ☐ | |
-| Q5 codegen on Windows (info) | n/a | n/a | ☐ | allowed to fail |
+| Q1 build (`swift build`) | ✅ | ✅ | ❌ | Windows: grpc-swift 2.2.3 missing `ucrt` import — see below |
+| Q2 unary RPC | ✅ | ✅ | ❌ | blocked by Q1 |
+| Q3 server-streaming RPC | ✅ | ✅ | ❌ | blocked by Q1 |
+| Q4 stdout handshake + 2-process | ✅ | ✅ | ❌ | blocked by Q1 |
+| Q5 codegen on Windows (info) | n/a | n/a | ? | allowed to fail |
+
+### Windows Q1 failure — diagnosis
+
+`GRPCCore/Call/Client/Internal/RetryDelaySequence.swift` uses `pow()` and imports it via platform guards:
+
+```swift
+#if canImport(Darwin)
+public import Darwin
+#elseif canImport(Android)
+public import Android
+#elseif canImport(Glibc)
+public import Glibc
+#elseif canImport(Musl)
+public import Musl
+#else
+#error("Unsupported OS")   // ← Windows hits this
+#endif
+```
+
+Windows should import `ucrt` (Swift's C standard library shim on Windows). The fix is a one-liner in grpc-swift upstream:
+
+```swift
+#elseif canImport(ucrt)
+public import ucrt
+```
+
+This is the **only** `#error("Unsupported OS")` in GRPCCore. All other grpc-swift source compiles on Windows without issue.
+
+### Decision (per §8 of the spike plan)
+
+Q1 fails on Windows for grpc-swift 2.2.3. However the failure is a trivial one-file patch in grpc-swift, **not** a fundamental architectural limitation. Options in order of preference:
+
+1. **Upstream the fix**: One-line PR to grpc-swift adding `#elseif canImport(ucrt)` in `RetryDelaySequence.swift`. If merged and released, grpc-swift is viable on Windows.
+2. **Vendor-patch**: Fork or local override of grpc-swift with the fix while the upstream PR is reviewed.
+3. **Custom framing fallback**: Length-prefixed protobuf over swift-nio TCP (swift-nio itself compiles on Windows without issue).
+4. **macOS/Linux only**: Defer Windows daemon.
 
 ---
 
