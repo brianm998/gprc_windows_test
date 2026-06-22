@@ -11,7 +11,10 @@ jobs:
     strategy:
       fail-fast: false          # we WANT to see all three results even if one fails
       matrix:
-        os: [ubuntu-latest, macos-14, windows-latest]
+        # macos-15: macOS 14 SDK lacks Sendable on Dispatch types (NIOEmbedded fails with Swift 6.1).
+        # windows-2022: windows-latest is now VS 2026 (MSVC 14.51) which requires Clang 20;
+        #   Swift 6.1 ships Clang 19, triggering STL1000. VS 2022 (MSVC 14.3x) is compatible.
+        os: [ubuntu-latest, macos-15, windows-2022]
     steps:
       - uses: actions/checkout@v4
 
@@ -62,7 +65,7 @@ jobs:
 
   codegen-windows:
     name: "Q5: codegen on Windows (informational)"
-    runs-on: windows-latest
+    runs-on: windows-2022            # windows-latest (VS 2026) incompatible with Swift 6.1's Clang 19
     continue-on-error: true        # never blocks; just tells us if Windows codegen is viable
     steps:
       - uses: actions/checkout@v4
