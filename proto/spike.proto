@@ -1,0 +1,12 @@
+syntax = "proto3";
+package spike.v1;
+
+service Echo {
+  // Q2: unary round-trip
+  rpc UnaryEcho(EchoRequest) returns (EchoResponse);
+  // Q3: server-streaming (mirrors Star's progress stream)
+  rpc StreamEcho(EchoRequest) returns (stream EchoResponse);
+}
+
+message EchoRequest  { string message = 1; int32 count = 2; }
+message EchoResponse { string message = 1; int32 index = 2; }

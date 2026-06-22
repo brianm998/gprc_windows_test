@@ -1,0 +1,80 @@
+name: grpc-swift cross-platform spike
+
+on:
+  push: {}
+  workflow_dispatch: {}
+
+jobs:
+  build-and-run:
+    name: "build+run (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false          # we WANT to see all three results even if one fails
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Uniform Swift setup across all three OSes. SwiftyLab/setup-swift supports Windows+macOS+Linux.
+      # Fallback for Windows specifically: compnerd/gha-setup-swift@main (branch: swift-6.0-release, tag: 6.0).
+      - name: Set up Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.0.0"
+
+      - name: Swift version
+        run: swift --version
+
+      # Windows gotcha: the Swift compiler needs the MSVC toolchain on PATH. The setup action usually
+      # handles this; if linking fails, uncomment the VS dev-cmd step below.
+      # - name: Set up MSVC (windows only)
+      #   if: runner.os == 'Windows'
+      #   uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Resolve
+        run: swift package resolve
+
+      - name: Upload Package.resolved
+        uses: actions/upload-artifact@v4
+        with:
+          name: "resolved-${{ matrix.os }}"
+          path: Package.resolved
+
+      # Q1: does it compile on this OS?
+      - name: Build
+        run: swift build -v
+
+      # Secondary sanity: in-process test (also part of Q1/Q2/Q3 coverage).
+      - name: Test (in-process)
+        run: swift test
+        continue-on-error: true   # the two-process harness below is the real gate
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Q2 + Q3 + Q4: two real processes, loopback, handshake, unary + streaming.
+      - name: Run two-process spike
+        run: python scripts/run_spike.py
+
+  codegen-windows:
+    name: "Q5: codegen on Windows (informational)"
+    runs-on: windows-latest
+    continue-on-error: true        # never blocks; just tells us if Windows codegen is viable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.0.0"
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+      # Build the swift protoc plugins from the resolved packages, then run protoc, then build.
+      # If the SwiftPM build-plugin route is preferred, switch SpikeProto to use the
+      # GRPCProtobufGenerator build plugin and just `swift build` here instead.
+      - name: Generate stubs on Windows
+        run: bash scripts/generate.sh
+      - name: Build with freshly generated stubs
+        run: swift build -v
